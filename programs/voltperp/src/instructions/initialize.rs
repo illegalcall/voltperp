@@ -18,10 +18,10 @@ pub struct Initialize<'info> {
         seeds = [ExchangeState::SEED.as_ref()],
         bump,
     )]
-    pub exchange_state: Account<'info, ExchangeState>,
+    pub exchange_state: Box<Account<'info, ExchangeState>>,
 
     /// Collateral token mint (e.g. USDC).
-    pub collateral_mint: Account<'info, Mint>,
+    pub collateral_mint: Box<Account<'info, Mint>>,
 
     /// Collateral vault — holds all user deposits.
     #[account(

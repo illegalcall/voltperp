@@ -65,3 +65,54 @@ pub fn is_funding_period_elapsed(
 ) -> bool {
     current_timestamp >= last_funding_timestamp.saturating_add(funding_period)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_positive_funding_rate() {
+        let rate = calculate_funding_rate(105_000_000, 100_000_000).unwrap();
+        assert!(rate > 0); // mark > oracle = longs pay
+    }
+
+    #[test]
+    fn test_negative_funding_rate() {
+        let rate = calculate_funding_rate(95_000_000, 100_000_000).unwrap();
+        assert!(rate < 0); // mark < oracle = shorts pay
+    }
+
+    #[test]
+    fn test_zero_funding_rate() {
+        let rate = calculate_funding_rate(100_000_000, 100_000_000).unwrap();
+        assert_eq!(rate, 0);
+    }
+
+    #[test]
+    fn test_capped_funding_rate() {
+        let rate = calculate_funding_rate(200_000_000, 100_000_000).unwrap();
+        assert!(rate <= MAX_FUNDING_RATE);
+    }
+
+    #[test]
+    fn test_long_pays_positive_funding() {
+        let payment = calculate_funding_payment(1_000_000, true, 1_000_000_000, 0).unwrap();
+        assert!(payment > 0); // Long pays when cumulative rate increased
+    }
+
+    #[test]
+    fn test_short_receives_positive_funding() {
+        let payment = calculate_funding_payment(1_000_000, false, 1_000_000_000, 0).unwrap();
+        assert!(payment < 0); // Short receives (negative = income)
+    }
+
+    #[test]
+    fn test_funding_period_not_elapsed() {
+        assert!(!is_funding_period_elapsed(1000, 3600, 2000));
+    }
+
+    #[test]
+    fn test_funding_period_elapsed() {
+        assert!(is_funding_period_elapsed(1000, 3600, 5000));
+    }
+}

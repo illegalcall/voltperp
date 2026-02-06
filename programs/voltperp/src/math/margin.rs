@@ -167,3 +167,91 @@ pub fn calculate_fee(notional_value: u64, fee_bps: u16) -> Result<u64> {
 
     u64::try_from(fee).map_err(|_| error!(VoltPerpError::CastOverflow))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn empty_user(collateral: u64) -> UserAccount {
+        UserAccount {
+            authority: Pubkey::default(),
+            collateral,
+            total_unrealized_pnl: 0,
+            total_fees_paid: 0,
+            positions: [Position::default(); MAX_POSITIONS],
+            active_positions: 0,
+            last_active_slot: 0,
+            bump: 0,
+        }
+    }
+
+    #[test]
+    fn test_no_positions_max_health() {
+        let user = empty_user(1_000_000);
+        let health = calculate_health_factor(&user, &[], &[]).unwrap();
+        assert_eq!(health, u64::MAX);
+    }
+
+    #[test]
+    fn test_liquidatable_check() {
+        assert!(is_liquidatable(500_000));  // Below 1_000_000
+        assert!(!is_liquidatable(1_000_001)); // Above
+    }
+
+    #[test]
+    fn test_partial_vs_full() {
+        assert!(is_partial_liquidation(600_000));  // > 500k threshold
+        assert!(!is_partial_liquidation(400_000)); // < 500k = full
+    }
+
+    #[test]
+    fn test_initial_margin_check() {
+        let ok = check_initial_margin(100_000, 0, 500_000, 100_000).unwrap();
+        // Required = 500_000 * 100_000 / 1_000_000 = 50_000
+        // Equity = 100_000 >= 50_000
+        assert!(ok);
+    }
+
+    #[test]
+    fn test_initial_margin_insufficient() {
+        let ok = check_initial_margin(10_000, 0, 500_000, 100_000).unwrap();
+        // Required = 50_000, equity = 10_000
+        assert!(!ok);
+    }
+
+    #[test]
+    fn test_fee_calculation() {
+        let fee = calculate_fee(1_000_000, 10).unwrap(); // 10 bps = 0.1%
+        assert_eq!(fee, 1_000); // 0.1% of 1M
+    }
+
+    #[test]
+    fn test_unrealized_pnl_long_profit() {
+        let pos = Position {
+            market_index: 0,
+            is_long: true,
+            base_asset_amount: 1_000_000,
+            quote_asset_amount: 100_000_000,
+            entry_price: 100_000_000, // $100
+            last_cumulative_funding: 0,
+            realized_pnl: 0,
+        };
+        let pnl = calculate_unrealized_pnl(&pos, 110_000_000).unwrap(); // $110
+        assert!(pnl > 0);
+    }
+
+    #[test]
+    fn test_unrealized_pnl_short_profit() {
+        let pos = Position {
+            market_index: 0,
+            is_long: false,
+            base_asset_amount: 1_000_000,
+            quote_asset_amount: 100_000_000,
+            entry_price: 100_000_000, // $100
+            last_cumulative_funding: 0,
+            realized_pnl: 0,
+        };
+        let pnl = calculate_unrealized_pnl(&pos, 90_000_000).unwrap(); // $90
+        assert!(pnl > 0);
+    }
+}

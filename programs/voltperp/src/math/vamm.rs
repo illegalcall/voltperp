@@ -137,3 +137,76 @@ pub fn calculate_entry_price(quote_amount: u64, base_amount: u64) -> Result<u64>
 
     u64::try_from(price).map_err(|_| error!(VoltPerpError::CastOverflow))
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn test_market() -> Market {
+        Market {
+            market_index: 0,
+            oracle_feed: Pubkey::default(),
+            symbol: *b"SOL-PERP\0\0\0\0",
+            base_asset_reserve: 1_000_000_000_000,
+            quote_asset_reserve: 100_000_000_000,
+            sqrt_k: 0,
+            peg_multiplier: PEG_PRECISION as u128,
+            total_long_base: 0,
+            total_short_base: 0,
+            open_interest: 0,
+            cumulative_funding_rate_long: 0,
+            cumulative_funding_rate_short: 0,
+            last_funding_timestamp: 0,
+            funding_period: 3600,
+            taker_fee_bps: 10,
+            max_leverage: 10,
+            maintenance_margin_ratio: 50_000,
+            initial_margin_ratio: 100_000,
+            liquidation_fee_bps: 500,
+            insurance_fee_bps: 100,
+            last_oracle_price: 100_000_000,
+            last_oracle_twap: 100_000_000,
+            max_oracle_staleness: 30,
+            bump: 0,
+        }
+    }
+
+    #[test]
+    fn test_mark_price_positive() {
+        let market = test_market();
+        let price = get_mark_price(&market).unwrap();
+        assert!(price > 0);
+    }
+
+    #[test]
+    fn test_long_swap_reduces_base() {
+        let market = test_market();
+        let result = swap_quote_for_base(&market, 1_000_000).unwrap();
+        assert!(result.base_asset_amount > 0);
+        assert!(result.new_base_reserve < market.base_asset_reserve);
+    }
+
+    #[test]
+    fn test_short_swap_reduces_quote() {
+        let market = test_market();
+        let result = swap_base_for_quote(&market, 1_000_000).unwrap();
+        assert!(result.quote_asset_amount > 0);
+        assert!(result.new_quote_reserve < market.quote_asset_reserve);
+    }
+
+    #[test]
+    fn test_entry_price_calc() {
+        let price = calculate_entry_price(100_000_000, 1_000_000).unwrap();
+        assert_eq!(price, 100_000_000);
+    }
+
+    #[test]
+    fn test_constant_product_preserved() {
+        let market = test_market();
+        let k_before = market.base_asset_reserve * market.quote_asset_reserve;
+        let result = swap_quote_for_base(&market, 1_000_000).unwrap();
+        let k_after = result.new_base_reserve * result.new_quote_reserve;
+        let diff = k_before.abs_diff(k_after);
+        assert!(diff < k_before / 1_000_000);
+    }
+}
