@@ -5,3 +5,4 @@ test-ledger/
 .DS_Store
 *.so
 ._DOT_UNDERSCORE
+._*
