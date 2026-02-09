@@ -80,7 +80,7 @@ pub fn handle_settle_funding(ctx: Context<SettleFunding>, market_index: u8) -> R
         .ok_or(VoltPerpError::MathOverflow)?;
     market.cumulative_funding_rate_short = market
         .cumulative_funding_rate_short
-        .checked_add(funding_rate)
+        .checked_sub(funding_rate)
         .ok_or(VoltPerpError::MathOverflow)?;
 
     market.last_funding_timestamp = clock.unix_timestamp;

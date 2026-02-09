@@ -104,6 +104,7 @@ pub fn handle_add_market(
     market.insurance_fee_bps = insurance_fee_bps;
     market.last_oracle_price = 0;
     market.last_oracle_twap = 0;
+    market.last_oracle_timestamp = 0;
     market.max_oracle_staleness = max_oracle_staleness;
     market.bump = ctx.bumps.market;
 

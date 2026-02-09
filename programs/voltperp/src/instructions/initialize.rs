@@ -51,6 +51,7 @@ pub fn handle_initialize(ctx: Context<Initialize>) -> Result<()> {
 
     exchange.authority = ctx.accounts.authority.key();
     exchange.insurance_fund_vault = ctx.accounts.insurance_fund_vault.key();
+    exchange.collateral_vault = ctx.accounts.collateral_vault.key();
     exchange.collateral_mint = ctx.accounts.collateral_mint.key();
     exchange.num_markets = 0;
     exchange.total_collateral = 0;

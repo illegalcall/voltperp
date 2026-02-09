@@ -43,6 +43,7 @@ pub struct Withdraw<'info> {
     #[account(
         mut,
         constraint = collateral_vault.mint == exchange_state.collateral_mint @ VoltPerpError::InvalidCollateralMint,
+        constraint = collateral_vault.key() == exchange_state.collateral_vault @ VoltPerpError::InvalidCollateralMint,
     )]
     pub collateral_vault: Box<Account<'info, TokenAccount>>,
 
@@ -84,6 +85,10 @@ pub fn handle_withdraw(ctx: Context<Withdraw>, amount: u64) -> Result<()> {
             );
 
             let market_ai = &remaining_accounts[market_idx];
+            require!(
+                market_ai.owner == &crate::ID,
+                VoltPerpError::InvalidMarketIndex
+            );
             let market_data = market_ai.try_borrow_data()?;
             let market =
                 Market::try_deserialize(&mut &market_data[..]).map_err(|_| VoltPerpError::InvalidMarketIndex)?;

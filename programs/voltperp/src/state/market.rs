@@ -47,6 +47,8 @@ pub struct Market {
     pub last_oracle_price: u64,
     /// Last recorded oracle TWAP (precision 1e6)
     pub last_oracle_twap: u64,
+    /// Last oracle update timestamp (unix timestamp)
+    pub last_oracle_timestamp: i64,
     /// Maximum oracle staleness in seconds
     pub max_oracle_staleness: u32,
     /// PDA bump seed

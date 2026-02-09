@@ -3,7 +3,9 @@ use anchor_lang::prelude::*;
 use crate::errors::VoltPerpError;
 use crate::events::PositionClosed;
 use crate::math::margin::calculate_fee;
-use crate::math::vamm::{get_mark_price, swap_base_for_quote, swap_quote_for_base};
+use crate::math::vamm::{
+    calculate_entry_price, get_mark_price, swap_base_for_quote, swap_quote_for_base,
+};
 use crate::state::{ExchangeState, Market, UserAccount};
 
 #[derive(Accounts)]
@@ -39,7 +41,11 @@ pub struct ClosePosition<'info> {
     pub market: Account<'info, Market>,
 }
 
-pub fn handle_close_position(ctx: Context<ClosePosition>, market_index: u8) -> Result<()> {
+pub fn handle_close_position(
+    ctx: Context<ClosePosition>,
+    market_index: u8,
+    limit_price: u64,
+) -> Result<()> {
     let user_account = &ctx.accounts.user_account;
 
     // Find position.
@@ -66,6 +72,25 @@ pub fn handle_close_position(ctx: Context<ClosePosition>, market_index: u8) -> R
     // Update vAMM reserves.
     market.base_asset_reserve = swap_result.new_base_reserve;
     market.quote_asset_reserve = swap_result.new_quote_reserve;
+
+    // Slippage protection on exit price.
+    let exit_price = calculate_entry_price(
+        swap_result.quote_asset_amount,
+        swap_result.base_asset_amount,
+    )?;
+    if position.is_long {
+        // Longs want min_exit_price: limit_price is the floor.
+        require!(
+            exit_price >= limit_price,
+            VoltPerpError::SlippageExceeded
+        );
+    } else {
+        // Shorts want max_exit_price: limit_price is the ceiling.
+        require!(
+            exit_price <= limit_price,
+            VoltPerpError::SlippageExceeded
+        );
+    }
 
     // Calculate PnL.
     let realized_pnl = if position.is_long {

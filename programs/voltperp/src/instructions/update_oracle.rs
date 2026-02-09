@@ -33,13 +33,22 @@ pub fn handle_update_oracle(
     _market_index: u8,
     price: u64,
     twap: u64,
+    oracle_timestamp: i64,
 ) -> Result<()> {
     require!(price > 0, VoltPerpError::InvalidOraclePrice);
     require!(twap > 0, VoltPerpError::InvalidOraclePrice);
 
     let market = &mut ctx.accounts.market;
+
+    // Validate timestamp is newer than last update (or first update).
+    require!(
+        oracle_timestamp > market.last_oracle_timestamp || market.last_oracle_price == 0,
+        VoltPerpError::StaleOraclePrice
+    );
+
     market.last_oracle_price = price;
     market.last_oracle_twap = twap;
+    market.last_oracle_timestamp = oracle_timestamp;
 
     Ok(())
 }

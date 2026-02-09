@@ -7,6 +7,8 @@ pub struct ExchangeState {
     pub authority: Pubkey,
     /// Insurance fund vault token account
     pub insurance_fund_vault: Pubkey,
+    /// Collateral vault token account
+    pub collateral_vault: Pubkey,
     /// Collateral token mint (e.g. USDC)
     pub collateral_mint: Pubkey,
     /// Number of active markets

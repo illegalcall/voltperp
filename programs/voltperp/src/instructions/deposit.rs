@@ -42,6 +42,7 @@ pub struct Deposit<'info> {
     #[account(
         mut,
         constraint = collateral_vault.mint == exchange_state.collateral_mint @ VoltPerpError::InvalidCollateralMint,
+        constraint = collateral_vault.key() == exchange_state.collateral_vault @ VoltPerpError::InvalidCollateralMint,
     )]
     pub collateral_vault: Box<Account<'info, TokenAccount>>,
 

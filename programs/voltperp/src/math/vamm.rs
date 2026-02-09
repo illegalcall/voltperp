@@ -166,6 +166,7 @@ mod tests {
             insurance_fee_bps: 100,
             last_oracle_price: 100_000_000,
             last_oracle_twap: 100_000_000,
+            last_oracle_timestamp: 0,
             max_oracle_staleness: 30,
             bump: 0,
         }

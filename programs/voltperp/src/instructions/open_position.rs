@@ -47,6 +47,7 @@ pub fn handle_open_position(
     quote_amount: u64,
     is_long: bool,
     leverage: u8,
+    limit_price: u64,
 ) -> Result<()> {
     let market = &ctx.accounts.market;
     let user_account = &ctx.accounts.user_account;
@@ -141,6 +142,20 @@ pub fn handle_open_position(
     let entry_price =
         calculate_entry_price(swap_result.quote_asset_amount, swap_result.base_asset_amount)?;
 
+    // Slippage protection: for longs, limit_price is max_entry_price;
+    // for shorts, limit_price is min_entry_price.
+    if is_long {
+        require!(
+            entry_price <= limit_price,
+            VoltPerpError::SlippageExceeded
+        );
+    } else {
+        require!(
+            entry_price >= limit_price,
+            VoltPerpError::SlippageExceeded
+        );
+    }
+
     // Get the cumulative funding rate for this position direction.
     let last_cumulative_funding = if is_long {
         market.cumulative_funding_rate_long
@@ -189,6 +204,7 @@ pub fn handle_open_position(
             .ok_or(VoltPerpError::MathOverflow)?;
         pos.entry_price =
             u64::try_from(avg_entry).map_err(|_| error!(VoltPerpError::CastOverflow))?;
+        pos.last_cumulative_funding = last_cumulative_funding;
     } else {
         // New position.
         pos.market_index = market_index;

@@ -71,12 +71,14 @@ pub mod voltperp {
     }
 
     /// Open a long or short perpetual position with leverage.
+    /// limit_price provides slippage protection against vAMM price impact.
     pub fn open_position(
         ctx: Context<OpenPosition>,
         market_index: u8,
         quote_amount: u64,
         is_long: bool,
         leverage: u8,
+        limit_price: u64,
     ) -> Result<()> {
         instructions::open_position::handle_open_position(
             ctx,
@@ -84,12 +86,14 @@ pub mod voltperp {
             quote_amount,
             is_long,
             leverage,
+            limit_price,
         )
     }
 
     /// Close an existing position and settle PnL.
-    pub fn close_position(ctx: Context<ClosePosition>, market_index: u8) -> Result<()> {
-        instructions::close_position::handle_close_position(ctx, market_index)
+    /// limit_price provides slippage protection on exit.
+    pub fn close_position(ctx: Context<ClosePosition>, market_index: u8, limit_price: u64) -> Result<()> {
+        instructions::close_position::handle_close_position(ctx, market_index, limit_price)
     }
 
     /// Liquidate an under-collateralized position.
@@ -110,7 +114,8 @@ pub mod voltperp {
         market_index: u8,
         price: u64,
         twap: u64,
+        oracle_timestamp: i64,
     ) -> Result<()> {
-        instructions::update_oracle::handle_update_oracle(ctx, market_index, price, twap)
+        instructions::update_oracle::handle_update_oracle(ctx, market_index, price, twap, oracle_timestamp)
     }
 }

@@ -9,7 +9,7 @@ use crate::math::margin::{
 use crate::math::vamm::{
     get_mark_price, swap_base_for_quote, swap_quote_for_base, PRICE_PRECISION,
 };
-use crate::state::{ExchangeState, Market, UserAccount};
+use crate::state::{ExchangeState, Market, UserAccount, MAX_POSITIONS};
 
 #[derive(Accounts)]
 #[instruction(market_index: u8)]
@@ -65,38 +65,84 @@ pub fn handle_liquidate(ctx: Context<Liquidate>, market_index: u8) -> Result<()>
     let position = user_account.positions[pos_idx];
     require!(!position.is_empty(), VoltPerpError::EmptyPosition);
 
-    // Calculate current mark price.
+    // Calculate current mark price for the target position's market.
     let mark_price = get_mark_price(market)?;
 
-    // Calculate unrealized PnL for this position.
-    let unrealized_pnl = calculate_unrealized_pnl(&position, mark_price)?;
+    // Calculate holistic health factor across ALL user positions.
+    let mut total_unrealized_pnl: i128 = 0;
+    let mut total_margin_required: u128 = 0;
 
-    // Calculate notional value.
-    let notional = (position.base_asset_amount as u128)
-        .checked_mul(mark_price as u128)
-        .ok_or(VoltPerpError::MathOverflow)?
-        .checked_div(PRICE_PRECISION)
-        .ok_or(VoltPerpError::DivisionByZero)?;
+    for i in 0..MAX_POSITIONS {
+        let pos = &user_account.positions[i];
+        if pos.is_empty() {
+            continue;
+        }
 
-    // Calculate maintenance margin required for this position.
-    let margin_required = notional
-        .checked_mul(market.maintenance_margin_ratio as u128)
-        .ok_or(VoltPerpError::MathOverflow)?
-        .checked_div(MARGIN_PRECISION as u128)
-        .ok_or(VoltPerpError::DivisionByZero)?;
+        // For the target market, use the already-loaded market account.
+        // For other markets, we use remaining_accounts.
+        let (pos_mark_price, maintenance_ratio) = if pos.market_index == market_index {
+            (mark_price, market.maintenance_margin_ratio)
+        } else {
+            // Find the market in remaining_accounts.
+            let mut found = false;
+            let mut p_mark_price = 0u64;
+            let mut p_maintenance = 0u32;
+            for acct in ctx.remaining_accounts.iter() {
+                if acct.owner != &crate::ID {
+                    continue;
+                }
+                let data = acct.try_borrow_data()?;
+                if let Ok(m) = Market::try_deserialize(&mut &data[..]) {
+                    if m.market_index == pos.market_index {
+                        p_mark_price = get_mark_price(&m)?;
+                        p_maintenance = m.maintenance_margin_ratio;
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            if !found {
+                // If market not provided in remaining_accounts, skip this position.
+                // This is conservative: we undercount margin required.
+                continue;
+            }
+            (p_mark_price, p_maintenance)
+        };
 
-    // Calculate simple health factor for this position.
+        let pnl = calculate_unrealized_pnl(pos, pos_mark_price)?;
+        total_unrealized_pnl = total_unrealized_pnl
+            .checked_add(pnl as i128)
+            .ok_or(VoltPerpError::MathOverflow)?;
+
+        let notional = (pos.base_asset_amount as u128)
+            .checked_mul(pos_mark_price as u128)
+            .ok_or(VoltPerpError::MathOverflow)?
+            .checked_div(PRICE_PRECISION)
+            .ok_or(VoltPerpError::DivisionByZero)?;
+
+        let margin = notional
+            .checked_mul(maintenance_ratio as u128)
+            .ok_or(VoltPerpError::MathOverflow)?
+            .checked_div(MARGIN_PRECISION as u128)
+            .ok_or(VoltPerpError::DivisionByZero)?;
+
+        total_margin_required = total_margin_required
+            .checked_add(margin)
+            .ok_or(VoltPerpError::MathOverflow)?;
+    }
+
+    // Calculate holistic health factor.
     let equity = (user_account.collateral as i128)
-        .checked_add(unrealized_pnl as i128)
+        .checked_add(total_unrealized_pnl)
         .ok_or(VoltPerpError::MathOverflow)?;
 
-    let health_factor = if margin_required == 0 || equity <= 0 {
+    let health_factor = if total_margin_required == 0 || equity <= 0 {
         0u64
     } else {
         let h = (equity as u128)
             .checked_mul(HEALTH_PRECISION as u128)
             .ok_or(VoltPerpError::MathOverflow)?
-            .checked_div(margin_required)
+            .checked_div(total_margin_required)
             .ok_or(VoltPerpError::DivisionByZero)?;
         u64::try_from(h).unwrap_or(u64::MAX)
     };
